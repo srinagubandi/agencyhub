@@ -17,8 +17,10 @@ app.use(express.json());
 app.use('/uploads', express.static(UPLOADS_PATH));
 
 // Serve React build in production
+// In the Docker container, server.js is at /app/backend/src/server.js
+// and the built frontend is at /app/backend/public/
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../public')));
+  app.use(express.static(path.join(__dirname, '../public')));
 }
 
 // Public routes
@@ -37,10 +39,10 @@ app.use('/api/v1/notifications', authMiddleware, require('./routes/notifications
 app.use('/api/v1/uploads', authMiddleware, require('./routes/uploads'));
 app.use('/api/v1/settings', authMiddleware, require('./routes/settings'));
 
-// SPA fallback
+// SPA fallback — serve React app for all non-API routes
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../public/index.html'));
+    res.sendFile(path.join(__dirname, '../public/index.html'));
   });
 }
 
