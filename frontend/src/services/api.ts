@@ -52,6 +52,8 @@ export const api = {
     invite: (data: unknown) => api.post('/users', data),
     update: (id: string, data: unknown) => api.patch(`/users/${id}`, data),
     deactivate: (id: string) => api.delete(`/users/${id}`),
+    // Super admin only — set a new password for any user without requiring their current password
+    setPassword: (id: string, newPassword: string) => api.post(`/users/${id}/set-password`, { newPassword }),
   },
 
   // Clients
@@ -75,6 +77,8 @@ export const api = {
   // Websites
   websites: {
     list: (accountId: string) => api.get(`/websites?accountId=${accountId}`),
+    // Fetch all websites for a client (across all its accounts) — used by the new column order
+    listByClient: (clientId: string) => api.get(`/websites?clientId=${clientId}`),
     create: (data: unknown) => api.post('/websites', data),
     update: (id: string, data: unknown) => api.patch(`/websites/${id}`, data),
   },

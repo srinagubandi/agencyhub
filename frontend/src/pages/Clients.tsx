@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 
 interface Client { id: string; name: string; logo_url?: string; is_active: boolean; managers?: unknown[]; }
 interface Account { id: string; name: string; client_id: string; }
-interface Website { id: string; url: string; account_id: string; }
+// Website now carries account_name from the joined query when fetched by clientId
+interface Website { id: string; url: string; account_id: string; account_name?: string; }
 interface Campaign { id: string; name: string; status: string; channel_category?: string; platform?: string; website_id: string; workers?: unknown[]; }
 
 const StatusBadge = ({ status }: { status: string }) => {
@@ -19,16 +20,18 @@ const StatusBadge = ({ status }: { status: string }) => {
 export default function Clients() {
   const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
-  const [selected, setSelected] = useState<{ client?: Client; account?: Account; website?: Website }>({});
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  // New column order: Clients → Websites → Accounts → Campaigns
+  // selected.website drives which account is shown and which campaigns are loaded
+  const [selected, setSelected] = useState<{ client?: Client; website?: Website; account?: Account }>({});
   const [websites, setWebsites] = useState<Website[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState<'client' | 'account' | 'website' | 'campaign' | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
 
-  // Logo upload state — tracks upload status per client
+  // Logo upload state
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoMsg, setLogoMsg] = useState('');
   const logoFileRef = useRef<HTMLInputElement>(null);
@@ -42,25 +45,27 @@ export default function Clients() {
     api.clients.list().then(d => { setClients(d || []); setLoading(false); });
   }, []);
 
+  // Selecting a client now loads all websites for that client directly (across all accounts)
   const selectClient = async (c: Client) => {
     setSelected({ client: c });
-    setWebsites([]); setCampaigns([]);
+    setAccounts([]); setCampaigns([]);
     setLogoMsg('');
-    const data = await api.accounts.list(c.id);
-    setAccounts(data || []);
-  };
-
-  const selectAccount = async (a: Account) => {
-    setSelected(s => ({ ...s, account: a }));
-    setCampaigns([]);
-    const data = await api.websites.list(a.id);
+    const data = await api.websites.listByClient(c.id);
     setWebsites(data || []);
   };
 
+  // Selecting a website resolves its account and loads campaigns
   const selectWebsite = async (w: Website) => {
     setSelected(s => ({ ...s, website: w }));
-    const data = await api.campaigns.list(w.id);
-    setCampaigns(data || []);
+    setCampaigns([]);
+    // Load the account for this website so it can be shown in the Accounts column
+    const accts = await api.accounts.list(selected.client!.id);
+    const acct = (accts || []).find((a: Account) => a.id === w.account_id) || null;
+    setAccounts(accts || []);
+    setSelected(s => ({ ...s, website: w, account: acct || undefined }));
+    // Load campaigns for this website
+    const camps = await api.campaigns.list(w.id);
+    setCampaigns(camps || []);
   };
 
   // Handle logo file selection and upload for the currently selected client
@@ -71,7 +76,6 @@ export default function Clients() {
     setLogoMsg('');
     try {
       const data = await api.uploads.clientLogo(selected.client.id, file);
-      // Update the client's logo_url in local state immediately (no full reload needed)
       const updatedClient = { ...selected.client, logo_url: data?.url || selected.client.logo_url };
       setSelected(s => ({ ...s, client: updatedClient }));
       setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
@@ -81,7 +85,6 @@ export default function Clients() {
       setLogoMsg(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setLogoUploading(false);
-      // Reset the file input so the same file can be re-selected if needed
       if (logoFileRef.current) logoFileRef.current.value = '';
     }
   };
@@ -94,12 +97,16 @@ export default function Clients() {
         await api.clients.create({ name: formData.name });
         await loadClients();
       } else if (showForm === 'account' && selected.client) {
+        // When adding an account, reload accounts for the current client
         await api.accounts.create({ clientId: selected.client.id, name: formData.name });
         const data = await api.accounts.list(selected.client.id);
         setAccounts(data || []);
-      } else if (showForm === 'website' && selected.account) {
-        await api.websites.create({ accountId: selected.account.id, url: formData.url });
-        const data = await api.websites.list(selected.account.id);
+      } else if (showForm === 'website' && selected.client) {
+        // When adding a website, an account must be selected first
+        if (!formData.accountId) { setFormError('Please select an account for this website.'); return; }
+        await api.websites.create({ accountId: formData.accountId, url: formData.url });
+        // Reload all websites for the client
+        const data = await api.websites.listByClient(selected.client.id);
         setWebsites(data || []);
       } else if (showForm === 'campaign' && selected.website) {
         await api.campaigns.create({ websiteId: selected.website.id, name: formData.name, channelCategory: formData.channelCategory, platform: formData.platform });
@@ -110,6 +117,15 @@ export default function Clients() {
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Failed');
     }
+  };
+
+  // When the user clicks "+ Add" for a website, pre-load accounts so they can pick one
+  const openAddWebsite = async () => {
+    if (!selected.client) return;
+    const data = await api.accounts.list(selected.client.id);
+    setAccounts(data || []);
+    setShowForm('website');
+    setFormData({});
   };
 
   const canEdit = user?.role === 'super_admin' || user?.role === 'manager';
@@ -129,7 +145,7 @@ export default function Clients() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Clients</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Agency → Clients → Accounts → Websites → Campaigns</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Agency → Clients → Websites → Accounts → Campaigns</p>
         </div>
         {user?.role === 'super_admin' && (
           <button onClick={() => { setShowForm('client'); setFormData({}); }}
@@ -145,37 +161,35 @@ export default function Clients() {
           <button onClick={() => setSelected({})} className="hover:text-brand-600">Clients</button>
           <span>/</span>
           <button onClick={() => setSelected(s => ({ client: s.client }))} className="hover:text-brand-600">{selected.client.name}</button>
-          {selected.account && (<><span>/</span><button onClick={() => setSelected(s => ({ client: s.client, account: s.account }))} className="hover:text-brand-600">{selected.account.name}</button></>)}
-          {selected.website && (<><span>/</span><span className="text-gray-900 dark:text-white">{selected.website.url}</span></>)}
+          {selected.website && (<><span>/</span><span className="text-gray-900 dark:text-white truncate max-w-xs">{selected.website.url}</span></>)}
         </nav>
       )}
 
-      {/* Client Logo Panel — shown when a client is selected, only editable by super_admin */}
+      {/* Client Logo Panel — shown when a client is selected */}
       {selected.client && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-5">
-            {/* Logo preview — container is large enough to show the full logo without clipping */}
-            <div className="w-28 h-28 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-200 dark:border-gray-600 p-1">
+            {/* Logo preview — auto-sizes to fit the image naturally, no forced square crop */}
+            <div className="flex-shrink-0 rounded-xl bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 p-2 flex items-center justify-center min-w-[48px] min-h-[48px] max-w-[180px] max-h-[100px] overflow-hidden">
               {selected.client.logo_url ? (
-                <img src={selected.client.logo_url} alt={`${selected.client.name} logo`} className="max-w-full max-h-full object-contain" />
+                // width/height are auto so the image expands to its natural proportions
+                // max-w and max-h on the container prevent it from becoming too large
+                <img
+                  src={selected.client.logo_url}
+                  alt={`${selected.client.name} logo`}
+                  className="object-contain max-w-full max-h-[84px] w-auto h-auto"
+                />
               ) : (
                 <span className="text-gray-400 text-xs text-center px-1">No logo</span>
               )}
             </div>
 
-            {/* Client name and logo upload controls */}
+            {/* Client name and upload controls */}
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-gray-900 dark:text-white text-base truncate">{selected.client.name}</h3>
               {user?.role === 'super_admin' && (
-                <div className="mt-2 flex items-center gap-3">
-                  {/* Hidden file input — triggered by the button below */}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    ref={logoFileRef}
-                    onChange={handleLogoUpload}
-                    className="hidden"
-                  />
+                <div className="mt-2 flex items-center gap-3 flex-wrap">
+                  <input type="file" accept="image/*" ref={logoFileRef} onChange={handleLogoUpload} className="hidden" />
                   <button
                     type="button"
                     onClick={() => logoFileRef.current?.click()}
@@ -186,7 +200,7 @@ export default function Clients() {
                   </button>
                   <span className="text-xs text-gray-400">JPEG, PNG, WebP — max 2MB</span>
                   {logoMsg && (
-                    <span className={`text-xs font-medium ${logoMsg.includes('failed') || logoMsg.includes('Failed') ? 'text-red-500' : 'text-green-600'}`}>
+                    <span className={`text-xs font-medium ${logoMsg.toLowerCase().includes('fail') ? 'text-red-500' : 'text-green-600'}`}>
                       {logoMsg}
                     </span>
                   )}
@@ -207,11 +221,22 @@ export default function Clients() {
             {formError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{formError}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
               {showForm === 'website' ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website URL</label>
-                  <input required value={formData.url || ''} onChange={e => setFormData(f => ({ ...f, url: e.target.value }))} placeholder="https://example.com"
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm" />
-                </div>
+                <>
+                  {/* Account selector — required when adding a website */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account</label>
+                    <select required value={formData.accountId || ''} onChange={e => setFormData(f => ({ ...f, accountId: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm">
+                      <option value="">Select account</option>
+                      {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Website URL</label>
+                    <input required value={formData.url || ''} onChange={e => setFormData(f => ({ ...f, url: e.target.value }))} placeholder="https://example.com"
+                      className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm" />
+                  </div>
+                </>
               ) : showForm === 'campaign' ? (
                 <>
                   <div>
@@ -256,8 +281,10 @@ export default function Clients() {
         </div>
       )}
 
+      {/* Four-column drill-down: Clients → Websites → Accounts → Campaigns */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-        {/* Clients list — shows logo thumbnail next to each client name */}
+
+        {/* Column 1: Clients — shows logo thumbnail next to each name */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
             <span>Clients</span>
@@ -268,10 +295,10 @@ export default function Clients() {
               {clients.map(c => (
                 <button key={c.id} onClick={() => selectClient(c)}
                   className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex items-center gap-3 ${selected.client?.id === c.id ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300'}`}>
-                  {/* Small logo thumbnail in the client list row */}
+                  {/* Small logo thumbnail — auto-sizes within a fixed cell */}
                   <div className="w-7 h-7 rounded-md bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0">
                     {c.logo_url ? (
-                      <img src={c.logo_url} alt="" className="w-full h-full object-contain" />
+                      <img src={c.logo_url} alt="" className="max-w-full max-h-full object-contain w-auto h-auto" />
                     ) : (
                       <span className="text-gray-400 text-xs font-bold">{c.name[0]}</span>
                     )}
@@ -284,7 +311,30 @@ export default function Clients() {
           )}
         </div>
 
-        {/* Accounts */}
+        {/* Column 2: Websites — loaded directly from client (no account selection needed first) */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
+            <span>Websites</span>
+            {selected.client && canEdit && (
+              <button onClick={openAddWebsite} className="text-xs text-brand-600 hover:text-brand-700">+ Add</button>
+            )}
+          </div>
+          <div className="divide-y divide-gray-50 dark:divide-gray-700 max-h-96 overflow-y-auto">
+            {!selected.client ? <div className="p-4 text-center text-gray-400 text-sm">Select a client</div> :
+              websites.length === 0 ? <div className="p-4 text-center text-gray-400 text-sm">No websites</div> :
+                websites.map(w => (
+                  <button key={w.id} onClick={() => selectWebsite(w)}
+                    className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 ${selected.website?.id === w.id ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                    <div className="truncate">{w.url}</div>
+                    {/* Show which account this website belongs to as a subtle sub-label */}
+                    {w.account_name && <div className="text-xs text-gray-400 mt-0.5 truncate">{w.account_name}</div>}
+                  </button>
+                ))
+            }
+          </div>
+        </div>
+
+        {/* Column 3: Accounts — shows the account for the selected website */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
             <span>Accounts</span>
@@ -293,40 +343,20 @@ export default function Clients() {
             )}
           </div>
           <div className="divide-y divide-gray-50 dark:divide-gray-700 max-h-96 overflow-y-auto">
-            {!selected.client ? <div className="p-4 text-center text-gray-400 text-sm">Select a client</div> :
-              accounts.length === 0 ? <div className="p-4 text-center text-gray-400 text-sm">No accounts</div> :
-                accounts.map(a => (
-                  <button key={a.id} onClick={() => selectAccount(a)}
-                    className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 ${selected.account?.id === a.id ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300'}`}>
-                    {a.name}
-                  </button>
-                ))
+            {!selected.website
+              ? <div className="p-4 text-center text-gray-400 text-sm">Select a website</div>
+              : !selected.account
+                ? <div className="p-4 text-center text-gray-400 text-sm">No account found</div>
+                : (
+                  <div className="px-4 py-3 text-sm bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 font-medium">
+                    {selected.account.name}
+                  </div>
+                )
             }
           </div>
         </div>
 
-        {/* Websites */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-          <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
-            <span>Websites</span>
-            {selected.account && canEdit && (
-              <button onClick={() => { setShowForm('website'); setFormData({}); }} className="text-xs text-brand-600 hover:text-brand-700">+ Add</button>
-            )}
-          </div>
-          <div className="divide-y divide-gray-50 dark:divide-gray-700 max-h-96 overflow-y-auto">
-            {!selected.account ? <div className="p-4 text-center text-gray-400 text-sm">Select an account</div> :
-              websites.length === 0 ? <div className="p-4 text-center text-gray-400 text-sm">No websites</div> :
-                websites.map(w => (
-                  <button key={w.id} onClick={() => selectWebsite(w)}
-                    className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 truncate ${selected.website?.id === w.id ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300'}`}>
-                    {w.url}
-                  </button>
-                ))
-            }
-          </div>
-        </div>
-
-        {/* Campaigns */}
+        {/* Column 4: Campaigns */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
             <span>Campaigns</span>

@@ -3,14 +3,30 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('../db/pool');
 const { requireRole } = require('../middleware/auth');
 
-// GET /api/v1/websites?accountId=
+// GET /api/v1/websites?accountId=  OR  ?clientId=
+// Supports filtering by accountId (original) or by clientId (joins through accounts table
+// so the frontend can load all websites for a client in one request).
 router.get('/', async (req, res) => {
-  const { accountId } = req.query;
-  if (!accountId) return res.status(400).json({ error: 'accountId required' });
-  const { rows } = await pool.query(
-    'SELECT * FROM websites WHERE account_id=$1 ORDER BY created_at DESC',
-    [accountId]
-  );
+  const { accountId, clientId } = req.query;
+  if (!accountId && !clientId) return res.status(400).json({ error: 'accountId or clientId required' });
+  let rows;
+  if (accountId) {
+    // Original behaviour — fetch websites for a specific account
+    ({ rows } = await pool.query(
+      'SELECT w.*, a.name AS account_name FROM websites w JOIN accounts a ON a.id=w.account_id WHERE w.account_id=$1 ORDER BY w.created_at DESC',
+      [accountId]
+    ));
+  } else {
+    // New behaviour — fetch all websites across all accounts that belong to a client
+    ({ rows } = await pool.query(
+      `SELECT w.*, a.name AS account_name, a.id AS account_id_ref
+       FROM websites w
+       JOIN accounts a ON a.id = w.account_id
+       WHERE a.client_id = $1
+       ORDER BY a.name, w.created_at DESC`,
+      [clientId]
+    ));
+  }
   res.json(rows);
 });
 

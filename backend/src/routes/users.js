@@ -90,6 +90,25 @@ router.patch('/:id', requireRole('super_admin'), async (req, res) => {
   res.json(rows[0]);
 });
 
+// POST /api/v1/users/:id/set-password
+// Allows a super_admin to set a new password for any user without needing the current password.
+// This is an admin-only action — regular users must use /auth/change-password instead.
+router.post('/:id/set-password', requireRole('super_admin'), async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword) return res.status(400).json({ error: 'newPassword is required' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  const bcrypt = require('bcrypt');
+  const hash = await bcrypt.hash(newPassword, 12);
+
+  const { rows } = await pool.query(
+    'UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2 RETURNING id,email,first_name,last_name',
+    [hash, req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+  res.json({ message: `Password updated for ${rows[0].first_name} ${rows[0].last_name}` });
+});
+
 // DELETE /api/v1/users/:id (deactivate)
 router.delete('/:id', requireRole('super_admin'), async (req, res) => {
   await pool.query('UPDATE users SET is_active=false WHERE id=$1', [req.params.id]);

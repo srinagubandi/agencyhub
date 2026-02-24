@@ -31,9 +31,17 @@ export default function Users() {
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [search, setSearch] = useState('');
 
-  // State for the inline role-change dropdown — tracks which user row is being edited
+  // Inline role-change state — tracks which user row is being edited
   const [editRoleUserId, setEditRoleUserId] = useState<string | null>(null);
   const [editRoleValue, setEditRoleValue] = useState('');
+
+  // Admin set-password modal state
+  const [pwModalUser, setPwModalUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwModalError, setPwModalError] = useState('');
+  const [pwModalSuccess, setPwModalSuccess] = useState('');
+  const [pwModalSaving, setPwModalSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -76,6 +84,54 @@ export default function Users() {
       load();
     }
     setEditRoleUserId(null);
+  };
+
+  // Open the set-password modal for a specific user
+  const openPwModal = (u: User) => {
+    setPwModalUser(u);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPwModalError('');
+    setPwModalSuccess('');
+  };
+
+  // Close and reset the set-password modal
+  const closePwModal = () => {
+    setPwModalUser(null);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPwModalError('');
+    setPwModalSuccess('');
+  };
+
+  // Handle admin password change form submission
+  const handleSetPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwModalError('');
+    setPwModalSuccess('');
+
+    if (newPassword.length < 8) {
+      setPwModalError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwModalError('Passwords do not match.');
+      return;
+    }
+
+    setPwModalSaving(true);
+    try {
+      const result = await api.users.setPassword(pwModalUser!.id, newPassword);
+      setPwModalSuccess(result?.message || 'Password updated successfully!');
+      setNewPassword('');
+      setConfirmPassword('');
+      // Auto-close the modal after a short delay
+      setTimeout(() => closePwModal(), 2500);
+    } catch (err: unknown) {
+      setPwModalError(err instanceof Error ? err.message : 'Failed to update password.');
+    } finally {
+      setPwModalSaving(false);
+    }
   };
 
   const filtered = users.filter(u =>
@@ -138,6 +194,67 @@ export default function Users() {
         </div>
       )}
 
+      {/* Admin Set-Password Modal */}
+      {pwModalUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Set Password</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+              Setting a new password for <strong>{pwModalUser.first_name} {pwModalUser.last_name}</strong> ({pwModalUser.email}).
+              No current password is required for admin overrides.
+            </p>
+
+            {pwModalError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{pwModalError}</div>
+            )}
+            {pwModalSuccess && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm">{pwModalSuccess}</div>
+            )}
+
+            <form onSubmit={handleSetPassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">New Password</label>
+                <input
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="submit"
+                  disabled={pwModalSaving}
+                  className="flex-1 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                >
+                  {pwModalSaving ? 'Saving...' : 'Set Password'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closePwModal}
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div className="p-4 border-b border-gray-100 dark:border-gray-700">
@@ -187,20 +304,8 @@ export default function Users() {
                             <option value="client">Client</option>
                             <option value="super_admin">Super Admin</option>
                           </select>
-                          {/* Save button */}
-                          <button
-                            onClick={() => saveRole(u)}
-                            className="text-xs px-2 py-1 bg-brand-500 hover:bg-brand-600 text-white rounded-lg"
-                          >
-                            Save
-                          </button>
-                          {/* Cancel button */}
-                          <button
-                            onClick={() => setEditRoleUserId(null)}
-                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg"
-                          >
-                            ✕
-                          </button>
+                          <button onClick={() => saveRole(u)} className="text-xs px-2 py-1 bg-brand-500 hover:bg-brand-600 text-white rounded-lg">Save</button>
+                          <button onClick={() => setEditRoleUserId(null)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg">✕</button>
                         </div>
                       ) : (
                         <RoleBadge role={u.role} />
@@ -218,13 +323,21 @@ export default function Users() {
                     {me?.role === 'super_admin' && (
                       <td className="px-6 py-4">
                         {u.id !== me.id && (
-                          <div className="flex items-center gap-3">
-                            {/* Change role button — opens inline dropdown */}
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {/* Change role — opens inline dropdown */}
                             <button
                               onClick={() => startEditRole(u)}
                               className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 transition-colors"
                             >
                               Change Role
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            {/* Set password — opens modal */}
+                            <button
+                              onClick={() => openPwModal(u)}
+                              className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors"
+                            >
+                              Set Password
                             </button>
                             <span className="text-gray-300 dark:text-gray-600">|</span>
                             {/* Activate / Deactivate toggle */}
