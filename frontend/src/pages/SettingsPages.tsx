@@ -84,9 +84,11 @@ export function Settings() {
 }
 
 export function Profile() {
-  const { user } = useAuth();
-  const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || '');
+  const { user, updateUser } = useAuth();
+  // photoUrl is derived from the shared auth context so it stays in sync across the app
+  const photoUrl = user?.photoUrl || '';
   const [photoMsg, setPhotoMsg] = useState('');
+  const [photoUploading, setPhotoUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Password change form state
@@ -98,10 +100,24 @@ export function Profile() {
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const data = await api.uploads.workerPhoto(file);
-    setPhotoUrl(data?.url || '');
-    setPhotoMsg('Photo updated!');
-    setTimeout(() => setPhotoMsg(''), 3000);
+    setPhotoUploading(true);
+    setPhotoMsg('');
+    try {
+      const data = await api.uploads.workerPhoto(file);
+      if (data?.url) {
+        // Push the new URL into the shared auth context AND localStorage so it
+        // persists across page reloads and updates the avatar everywhere in the app.
+        updateUser({ photoUrl: data.url });
+      }
+      setPhotoMsg('Photo updated!');
+      setTimeout(() => setPhotoMsg(''), 3000);
+    } catch (err: unknown) {
+      setPhotoMsg(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setPhotoUploading(false);
+      // Reset file input so the same file can be re-selected if needed
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
   // Handle password change form submission
@@ -155,9 +171,9 @@ export function Profile() {
           </div>
           <div>
             <input type="file" accept="image/*" ref={fileRef} onChange={handlePhotoUpload} className="hidden" />
-            <button type="button" onClick={() => fileRef.current?.click()}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
-              Upload Photo
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={photoUploading}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50">
+              {photoUploading ? 'Uploading...' : photoUrl ? 'Change Photo' : 'Upload Photo'}
             </button>
             {photoMsg && <p className="text-xs text-green-600 mt-1">{photoMsg}</p>}
             <p className="text-xs text-gray-400 mt-1">256×256px · WebP preferred</p>

@@ -15,6 +15,9 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  // Merge a partial update into the shared user object and persist to localStorage.
+  // Use this after any action that changes the user's own data (e.g. photo upload).
+  updateUser: (patch: Partial<User>) => void;
   isLoading: boolean;
 }
 
@@ -48,8 +51,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
   };
 
+  // Merge a partial update into the current user and persist to localStorage so
+  // the updated value survives a page reload.
+  const updateUser = (patch: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...patch };
+      localStorage.setItem('user', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, updateUser, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

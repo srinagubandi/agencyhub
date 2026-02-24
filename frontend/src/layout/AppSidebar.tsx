@@ -51,8 +51,13 @@ export default function AppSidebar() {
       {/* User + logout */}
       <div className="px-4 py-4 border-t border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-700 dark:text-blue-400 text-xs font-bold">
-            {user?.firstName?.[0]}{user?.lastName?.[0]}
+          {/* Show uploaded photo if available, otherwise fall back to initials */}
+          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-700 dark:text-blue-400 text-xs font-bold overflow-hidden flex-shrink-0">
+            {user?.photoUrl ? (
+              <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span>{user?.firstName?.[0]}{user?.lastName?.[0]}</span>
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.firstName} {user?.lastName}</div>
