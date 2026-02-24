@@ -149,10 +149,10 @@ export default function TimeEntries() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Channel</label>
                 <select required value={form.accountId} onChange={e => onAccountChange(e.target.value)} disabled={!form.clientId}
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm disabled:opacity-50">
-                  <option value="">Select account</option>
+                  <option value="">Select channel</option>
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>

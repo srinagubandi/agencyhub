@@ -20,8 +20,8 @@ const StatusBadge = ({ status }: { status: string }) => {
 export default function Clients() {
   const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
-  // New column order: Clients → Websites → Accounts → Campaigns
-  // selected.website drives which account is shown and which campaigns are loaded
+  // New column order: Clients → Websites → Channels → Campaigns
+  // selected.website drives which channel is shown and which campaigns are loaded
   const [selected, setSelected] = useState<{ client?: Client; website?: Website; account?: Account }>({});
   const [websites, setWebsites] = useState<Website[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -145,7 +145,7 @@ export default function Clients() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Clients</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Agency → Clients → Websites → Accounts → Campaigns</p>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Agency → Clients → Websites → Channels → Campaigns</p>
         </div>
         {user?.role === 'super_admin' && (
           <button onClick={() => { setShowForm('client'); setFormData({}); }}
@@ -216,7 +216,7 @@ export default function Clients() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              {showForm === 'client' ? 'New Client' : showForm === 'account' ? 'New Account' : showForm === 'website' ? 'New Website' : 'New Campaign'}
+              {showForm === 'client' ? 'New Client' : showForm === 'account' ? 'New Channel' : showForm === 'website' ? 'New Website' : 'New Campaign'}
             </h3>
             {formError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{formError}</div>}
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -224,7 +224,7 @@ export default function Clients() {
                 <>
                   {/* Account selector — required when adding a website */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Channel</label>
                     <select required value={formData.accountId || ''} onChange={e => setFormData(f => ({ ...f, accountId: e.target.value }))}
                       className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm">
                       <option value="">Select account</option>
@@ -334,10 +334,10 @@ export default function Clients() {
           </div>
         </div>
 
-        {/* Column 3: Accounts — shows the account for the selected website */}
+        {/* Column 3: Channels — shows the channel for the selected website */
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
-            <span>Accounts</span>
+            <span>Channels</span>
             {selected.client && canEdit && (
               <button onClick={() => { setShowForm('account'); setFormData({}); }} className="text-xs text-brand-600 hover:text-brand-700">+ Add</button>
             )}
