@@ -169,15 +169,15 @@ export default function Clients() {
       {selected.client && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-5">
-            {/* Logo preview — auto-sizes to fit the image naturally, no forced square crop */}
-            <div className="flex-shrink-0 rounded-xl bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 p-2 flex items-center justify-center min-w-[48px] min-h-[48px] max-w-[180px] max-h-[100px] overflow-hidden">
+            {/* Logo preview — auto-sizes to the image's natural proportions.
+                 The container grows up to 320px wide and 120px tall so wide wordmark
+                 logos like VuVa display fully without any cropping. */}
+            <div className="flex-shrink-0 rounded-xl bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 p-2 flex items-center justify-center overflow-hidden" style={{ maxWidth: '320px', maxHeight: '120px', minWidth: '48px', minHeight: '48px' }}>
               {selected.client.logo_url ? (
-                // width/height are auto so the image expands to its natural proportions
-                // max-w and max-h on the container prevent it from becoming too large
                 <img
                   src={selected.client.logo_url}
                   alt={`${selected.client.name} logo`}
-                  className="object-contain max-w-full max-h-[84px] w-auto h-auto"
+                  style={{ maxWidth: '304px', maxHeight: '104px', width: 'auto', height: 'auto', objectFit: 'contain' }}
                 />
               ) : (
                 <span className="text-gray-400 text-xs text-center px-1">No logo</span>

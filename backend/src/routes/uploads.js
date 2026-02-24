@@ -53,7 +53,9 @@ router.post('/client-logo/:clientId', requireRole('super_admin'), upload.single(
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const old = await pool.query('SELECT logo_url FROM clients WHERE id=$1', [req.params.clientId]);
   deleteOldFile(old.rows[0]?.logo_url);
-  const relUrl = await saveImage(req.file.buffer, 'clients', req.params.clientId, 400, 400);
+  // Preserve aspect ratio — pass null for height so saveImage uses 'inside' fit
+  // This prevents wide wordmark logos from being cropped into a square
+  const relUrl = await saveImage(req.file.buffer, 'clients', req.params.clientId, 600, null);
   await pool.query('UPDATE clients SET logo_url=$1, updated_at=NOW() WHERE id=$2', [relUrl, req.params.clientId]);
   res.json({ url: `${UPLOADS_BASE_URL}${relUrl}` });
 });
