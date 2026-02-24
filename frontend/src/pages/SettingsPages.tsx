@@ -3,7 +3,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export function Settings() {
-  const { user } = useAuth();
+  useAuth();
   const [companyName, setCompanyName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [saving, setSaving] = useState(false);
