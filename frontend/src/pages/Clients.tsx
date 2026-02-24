@@ -154,10 +154,10 @@ export default function Clients() {
       {selected.client && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-5">
-            {/* Logo preview */}
-            <div className="w-16 h-16 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-200 dark:border-gray-600">
+            {/* Logo preview — container is large enough to show the full logo without clipping */}
+            <div className="w-28 h-28 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-200 dark:border-gray-600 p-1">
               {selected.client.logo_url ? (
-                <img src={selected.client.logo_url} alt={`${selected.client.name} logo`} className="w-full h-full object-contain" />
+                <img src={selected.client.logo_url} alt={`${selected.client.name} logo`} className="max-w-full max-h-full object-contain" />
               ) : (
                 <span className="text-gray-400 text-xs text-center px-1">No logo</span>
               )}
