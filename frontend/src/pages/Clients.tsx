@@ -334,7 +334,7 @@ export default function Clients() {
           </div>
         </div>
 
-        {/* Column 3: Channels — shows the channel for the selected website */
+        {/* Column 3: Channels — shows the channel for the selected website */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
             <span>Channels</span>
