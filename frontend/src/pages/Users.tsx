@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 interface User {
   id: string; email: string; first_name: string; last_name: string;
   role: string; is_active: boolean; created_at: string;
+  // photo_url is returned by the API when a user has uploaded a profile photo
+  photo_url?: string;
 }
 
 const RoleBadge = ({ role }: { role: string }) => {
@@ -282,8 +284,13 @@ export default function Users() {
                   <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-700 dark:text-brand-400 text-xs font-bold">
-                          {u.first_name[0]}{u.last_name[0]}
+                        {/* Show uploaded photo if available, otherwise fall back to initials */}
+                        <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-brand-700 dark:text-brand-400 text-xs font-bold overflow-hidden flex-shrink-0">
+                          {u.photo_url ? (
+                            <img src={u.photo_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{u.first_name[0]}{u.last_name[0]}</span>
+                          )}
                         </div>
                         <span className="font-medium text-gray-900 dark:text-white">{u.first_name} {u.last_name}</span>
                       </div>
