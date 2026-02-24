@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent, useRef } from 'react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,6 +28,16 @@ export default function Clients() {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
 
+  // Logo upload state — tracks upload status per client
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoMsg, setLogoMsg] = useState('');
+  const logoFileRef = useRef<HTMLInputElement>(null);
+
+  const loadClients = async () => {
+    const data = await api.clients.list();
+    setClients(data || []);
+  };
+
   useEffect(() => {
     api.clients.list().then(d => { setClients(d || []); setLoading(false); });
   }, []);
@@ -35,6 +45,7 @@ export default function Clients() {
   const selectClient = async (c: Client) => {
     setSelected({ client: c });
     setWebsites([]); setCampaigns([]);
+    setLogoMsg('');
     const data = await api.accounts.list(c.id);
     setAccounts(data || []);
   };
@@ -52,14 +63,36 @@ export default function Clients() {
     setCampaigns(data || []);
   };
 
+  // Handle logo file selection and upload for the currently selected client
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selected.client) return;
+    setLogoUploading(true);
+    setLogoMsg('');
+    try {
+      const data = await api.uploads.clientLogo(selected.client.id, file);
+      // Update the client's logo_url in local state immediately (no full reload needed)
+      const updatedClient = { ...selected.client, logo_url: data?.url || selected.client.logo_url };
+      setSelected(s => ({ ...s, client: updatedClient }));
+      setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+      setLogoMsg('Logo updated!');
+      setTimeout(() => setLogoMsg(''), 3000);
+    } catch (err: unknown) {
+      setLogoMsg(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setLogoUploading(false);
+      // Reset the file input so the same file can be re-selected if needed
+      if (logoFileRef.current) logoFileRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError('');
     try {
       if (showForm === 'client') {
         await api.clients.create({ name: formData.name });
-        const data = await api.clients.list();
-        setClients(data || []);
+        await loadClients();
       } else if (showForm === 'account' && selected.client) {
         await api.accounts.create({ clientId: selected.client.id, name: formData.name });
         const data = await api.accounts.list(selected.client.id);
@@ -115,6 +148,53 @@ export default function Clients() {
           {selected.account && (<><span>/</span><button onClick={() => setSelected(s => ({ client: s.client, account: s.account }))} className="hover:text-brand-600">{selected.account.name}</button></>)}
           {selected.website && (<><span>/</span><span className="text-gray-900 dark:text-white">{selected.website.url}</span></>)}
         </nav>
+      )}
+
+      {/* Client Logo Panel — shown when a client is selected, only editable by super_admin */}
+      {selected.client && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex items-center gap-5">
+            {/* Logo preview */}
+            <div className="w-16 h-16 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0 border border-gray-200 dark:border-gray-600">
+              {selected.client.logo_url ? (
+                <img src={selected.client.logo_url} alt={`${selected.client.name} logo`} className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-gray-400 text-xs text-center px-1">No logo</span>
+              )}
+            </div>
+
+            {/* Client name and logo upload controls */}
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 dark:text-white text-base truncate">{selected.client.name}</h3>
+              {user?.role === 'super_admin' && (
+                <div className="mt-2 flex items-center gap-3">
+                  {/* Hidden file input — triggered by the button below */}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={logoFileRef}
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => logoFileRef.current?.click()}
+                    disabled={logoUploading}
+                    className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                  >
+                    {logoUploading ? 'Uploading...' : selected.client.logo_url ? 'Change Logo' : 'Upload Logo'}
+                  </button>
+                  <span className="text-xs text-gray-400">JPEG, PNG, WebP — max 2MB</span>
+                  {logoMsg && (
+                    <span className={`text-xs font-medium ${logoMsg.includes('failed') || logoMsg.includes('Failed') ? 'text-red-500' : 'text-green-600'}`}>
+                      {logoMsg}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Form Modal */}
@@ -177,7 +257,7 @@ export default function Clients() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-        {/* Clients list */}
+        {/* Clients list — shows logo thumbnail next to each client name */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white flex justify-between items-center">
             <span>Clients</span>
@@ -187,8 +267,16 @@ export default function Clients() {
             <div className="divide-y divide-gray-50 dark:divide-gray-700 max-h-96 overflow-y-auto">
               {clients.map(c => (
                 <button key={c.id} onClick={() => selectClient(c)}
-                  className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${selected.client?.id === c.id ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300'}`}>
-                  {c.name}
+                  className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors flex items-center gap-3 ${selected.client?.id === c.id ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                  {/* Small logo thumbnail in the client list row */}
+                  <div className="w-7 h-7 rounded-md bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {c.logo_url ? (
+                      <img src={c.logo_url} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-gray-400 text-xs font-bold">{c.name[0]}</span>
+                    )}
+                  </div>
+                  <span className="truncate">{c.name}</span>
                 </button>
               ))}
               {clients.length === 0 && <div className="p-4 text-center text-gray-400 text-sm">No clients yet</div>}

@@ -101,6 +101,28 @@ router.post('/accept-invite', async (req, res) => {
   res.json({ token: signToken(rows[0]), user: { id: rows[0].id, email: rows[0].email, role: rows[0].role } });
 });
 
+// POST /api/v1/auth/change-password
+// Allows any authenticated user to change their own password by providing their current password.
+router.post('/change-password', require('../middleware/auth').authMiddleware, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+  // Fetch the user's current password hash
+  const { rows } = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
+  if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+  // Verify current password is correct before allowing change
+  const match = await bcrypt.compare(currentPassword, rows[0].password_hash);
+  if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+  // Hash and save the new password
+  const newHash = await bcrypt.hash(newPassword, 12);
+  await pool.query('UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [newHash, req.user.id]);
+  res.json({ message: 'Password changed successfully' });
+});
+
 // GET /api/v1/auth/me
 router.get('/me', require('../middleware/auth').authMiddleware, async (req, res) => {
   const { rows } = await pool.query(

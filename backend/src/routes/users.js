@@ -35,7 +35,8 @@ router.get('/:id', requireRole('super_admin', 'manager'), async (req, res) => {
 router.post('/', requireRole('super_admin'), async (req, res) => {
   const { email, firstName, lastName, role } = req.body;
   if (!email || !firstName || !lastName || !role) return res.status(400).json({ error: 'All fields required' });
-  if (!['manager', 'worker', 'client'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
+  // super_admin can invite users with any role including super_admin
+  if (!['manager', 'worker', 'client', 'super_admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
 
   const existing = await pool.query('SELECT id FROM users WHERE email=$1', [email.toLowerCase()]);
   if (existing.rows[0]) return res.status(409).json({ error: 'Email already exists' });
@@ -67,6 +68,10 @@ router.post('/', requireRole('super_admin'), async (req, res) => {
 // PATCH /api/v1/users/:id
 router.patch('/:id', requireRole('super_admin'), async (req, res) => {
   const { firstName, lastName, role, isActive } = req.body;
+  // Validate role if provided — all roles including super_admin are permitted
+  if (role !== undefined && !['manager', 'worker', 'client', 'super_admin'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
   const updates = [];
   const params = [];
   let i = 1;

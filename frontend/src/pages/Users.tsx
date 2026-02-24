@@ -31,6 +31,10 @@ export default function Users() {
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [search, setSearch] = useState('');
 
+  // State for the inline role-change dropdown — tracks which user row is being edited
+  const [editRoleUserId, setEditRoleUserId] = useState<string | null>(null);
+  const [editRoleValue, setEditRoleValue] = useState('');
+
   const load = async () => {
     setLoading(true);
     const data = await api.users.list();
@@ -57,6 +61,21 @@ export default function Users() {
   const handleToggleActive = async (u: User) => {
     await api.users.update(u.id, { isActive: !u.is_active });
     load();
+  };
+
+  // Open the inline role editor for a specific user row
+  const startEditRole = (u: User) => {
+    setEditRoleUserId(u.id);
+    setEditRoleValue(u.role);
+  };
+
+  // Save the changed role and close the editor
+  const saveRole = async (u: User) => {
+    if (editRoleValue !== u.role) {
+      await api.users.update(u.id, { role: editRoleValue });
+      load();
+    }
+    setEditRoleUserId(null);
   };
 
   const filtered = users.filter(u =>
@@ -102,11 +121,13 @@ export default function Users() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
+              {/* super_admin option included so admins can invite other admins */}
               <select value={inviteForm.role} onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm">
                 <option value="worker">Worker</option>
                 <option value="manager">Manager</option>
                 <option value="client">Client</option>
+                <option value="super_admin">Super Admin</option>
               </select>
             </div>
             <div className="sm:col-span-2 flex gap-3">
@@ -151,20 +172,69 @@ export default function Users() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{u.email}</td>
-                    <td className="px-6 py-4"><RoleBadge role={u.role} /></td>
+
+                    {/* Role cell — shows inline dropdown editor when editRoleUserId matches */}
+                    <td className="px-6 py-4">
+                      {me?.role === 'super_admin' && u.id !== me.id && editRoleUserId === u.id ? (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={editRoleValue}
+                            onChange={e => setEditRoleValue(e.target.value)}
+                            className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+                          >
+                            <option value="worker">Worker</option>
+                            <option value="manager">Manager</option>
+                            <option value="client">Client</option>
+                            <option value="super_admin">Super Admin</option>
+                          </select>
+                          {/* Save button */}
+                          <button
+                            onClick={() => saveRole(u)}
+                            className="text-xs px-2 py-1 bg-brand-500 hover:bg-brand-600 text-white rounded-lg"
+                          >
+                            Save
+                          </button>
+                          {/* Cancel button */}
+                          <button
+                            onClick={() => setEditRoleUserId(null)}
+                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <RoleBadge role={u.role} />
+                      )}
+                    </td>
+
                     <td className="px-6 py-4">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {u.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{new Date(u.created_at).toLocaleDateString()}</td>
+
+                    {/* Actions column — only visible to super_admin */}
                     {me?.role === 'super_admin' && (
                       <td className="px-6 py-4">
                         {u.id !== me.id && (
-                          <button onClick={() => handleToggleActive(u)}
-                            className="text-xs text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 transition-colors">
-                            {u.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
+                          <div className="flex items-center gap-3">
+                            {/* Change role button — opens inline dropdown */}
+                            <button
+                              onClick={() => startEditRole(u)}
+                              className="text-xs text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 transition-colors"
+                            >
+                              Change Role
+                            </button>
+                            <span className="text-gray-300 dark:text-gray-600">|</span>
+                            {/* Activate / Deactivate toggle */}
+                            <button
+                              onClick={() => handleToggleActive(u)}
+                              className="text-xs text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                            >
+                              {u.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </div>
                         )}
                       </td>
                     )}

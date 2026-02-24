@@ -40,6 +40,9 @@ export const api = {
     forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
     resetPassword: (token: string, password: string) => api.post('/auth/reset-password', { token, password }),
     acceptInvite: (token: string, password: string) => api.post('/auth/accept-invite', { token, password }),
+    // Change password for the currently authenticated user
+    changePassword: (currentPassword: string, newPassword: string) =>
+      api.post('/auth/change-password', { currentPassword, newPassword }),
   },
 
   // Users

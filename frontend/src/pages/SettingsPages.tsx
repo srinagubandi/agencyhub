@@ -86,16 +86,52 @@ export function Settings() {
 export function Profile() {
   const { user } = useAuth();
   const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || '');
-  const [msg, setMsg] = useState('');
+  const [photoMsg, setPhotoMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Password change form state
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const data = await api.uploads.workerPhoto(file);
     setPhotoUrl(data?.url || '');
-    setMsg('Photo updated!');
-    setTimeout(() => setMsg(''), 3000);
+    setPhotoMsg('Photo updated!');
+    setTimeout(() => setPhotoMsg(''), 3000);
+  };
+
+  // Handle password change form submission
+  const handleChangePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwError('');
+    setPwSuccess('');
+
+    // Client-side validation before hitting the API
+    if (pwForm.newPassword.length < 8) {
+      setPwError('New password must be at least 8 characters.');
+      return;
+    }
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      setPwError('New passwords do not match.');
+      return;
+    }
+
+    setPwSaving(true);
+    try {
+      await api.auth.changePassword(pwForm.currentPassword, pwForm.newPassword);
+      setPwSuccess('Password changed successfully!');
+      // Clear the form after success
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setPwSuccess(''), 4000);
+    } catch (err: unknown) {
+      setPwError(err instanceof Error ? err.message : 'Failed to change password.');
+    } finally {
+      setPwSaving(false);
+    }
   };
 
   const initials = user ? `${user.firstName[0]}${user.lastName[0]}` : '??';
@@ -107,6 +143,7 @@ export function Profile() {
         <p className="text-gray-500 dark:text-gray-400 mt-1">Your account information</p>
       </div>
 
+      {/* Profile info card */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 space-y-6">
         <div className="flex items-center gap-5">
           <div className="w-20 h-20 rounded-full overflow-hidden bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
@@ -122,7 +159,7 @@ export function Profile() {
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
               Upload Photo
             </button>
-            {msg && <p className="text-xs text-green-600 mt-1">{msg}</p>}
+            {photoMsg && <p className="text-xs text-green-600 mt-1">{photoMsg}</p>}
             <p className="text-xs text-gray-400 mt-1">256×256px · WebP preferred</p>
           </div>
         </div>
@@ -145,6 +182,64 @@ export function Profile() {
             <div className="px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm capitalize">{user?.role?.replace('_', ' ')}</div>
           </div>
         </div>
+      </div>
+
+      {/* Change Password card — available to all authenticated users */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Change Password</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Update your account password. You must provide your current password to confirm the change.</p>
+
+        {pwError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">{pwError}</div>
+        )}
+        {pwSuccess && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm">{pwSuccess}</div>
+        )}
+
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Current Password</label>
+            <input
+              type="password"
+              required
+              value={pwForm.currentPassword}
+              onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))}
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+              placeholder="Enter your current password"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">New Password</label>
+            <input
+              type="password"
+              required
+              value={pwForm.newPassword}
+              onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))}
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+              placeholder="At least 8 characters"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Confirm New Password</label>
+            <input
+              type="password"
+              required
+              value={pwForm.confirmPassword}
+              onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))}
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+              placeholder="Re-enter new password"
+            />
+          </div>
+          <div>
+            <button
+              type="submit"
+              disabled={pwSaving}
+              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-medium disabled:opacity-50 transition-colors"
+            >
+              {pwSaving ? 'Saving...' : 'Update Password'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
